@@ -64,6 +64,7 @@ func (p *Peer) StartCommandLine(){
 	fmt.Println("  list-peers - List known peers")
 	fmt.Println("  list-files - List local files")
 	fmt.Println("  get-files <address> - Get file list from a peer")
+	fmt.Println("  download <address> <filename> - Download a file from a peer")
 	fmt.Println("  refresh - Rescan the local share directory")
 	fmt.Println("  exit - Exit the application")
 
@@ -104,6 +105,13 @@ func (p *Peer) StartCommandLine(){
 				continue
 			}
 			go p.requestFileList(parts[1])
+
+		case "download":
+			if len(parts) < 3 {
+				fmt.Println("Usage: download <address> <filename>")
+				continue
+			}
+			go p.downloadFile(parts[1], parts[2])
 
 		case "refresh":
 			p.scanLocalFiles()

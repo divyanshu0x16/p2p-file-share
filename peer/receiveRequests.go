@@ -5,6 +5,8 @@ import (
 	"net"
 	"bufio"
 	"strings"
+	"encoding/binary"
+	"p2p-file-share/file"
 )
 
 func (p *Peer) handleConnection(conn net.Conn){
@@ -22,6 +24,9 @@ func (p *Peer) handleConnection(conn net.Conn){
 
 		if strings.HasPrefix(message, "GET_FILES"){
 			p.sendFileList(conn)
+		}else if strings.HasPrefix(message, "GET_FILE "){
+			fileName := strings.TrimPrefix(message, "GET_FILE ")
+			p.sendFile(conn, fileName)
 		}else{
 			conn.Write([]byte("Received your message: " + message + "\n"))
 		}
@@ -47,4 +52,31 @@ func (p *Peer) sendFileList(conn net.Conn) {
 	
 	// Send the JSON data with a newline
 	conn.Write(append(jsonData, '\n'))
+}
+
+func (p *Peer) sendFile(conn net.Conn, fileName string){
+	fmt.Printf("Received request for file: %s\n", fileName)
+
+	data, err := file.ReadFile(fileName, p.shareDir)
+	if err != nil {
+		errorMsg := fmt.Sprintf("ERROR: %v\n", err)
+		fmt.Println(errorMsg)
+		conn.Write([]byte(errorMsg))
+	}
+
+	//Send file size first (4 bytes)
+	sizeBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(sizeBuf, uint32(len(data)))
+	if _, err := conn.Write(sizeBuf); err != nil {
+		fmt.Printf("Failed to send file size: %v\n", err)
+		return
+	}
+
+	//Send file data
+	if _, err := conn.Write(data); err != nil {
+		fmt.Printf("Failed to send file: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Successfully sent file: %s (%d bytes)\n", fileName, len(data))
 }
