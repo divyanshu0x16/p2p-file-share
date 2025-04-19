@@ -94,21 +94,21 @@ func (p *Peer) downloadFile(address string, fileName string){
 		return
 	}
 
-	fileSize := binary.BigEndian.Uint32(sizeBuf)
-	//If message size is small, it can be an error
-	if fileSize < 100 {
-		message := make([]byte, fileSize)
-		if _, err := io.ReadFull(conn, message); err != nil {
+	if string(sizeBuf) == "ERR!" {
+		reader := bufio.NewReader(conn)
+		response, err := reader.ReadString('\n')
+		if err != nil {
 			fmt.Printf("Failed to read error message: %v\n", err)
 			return
 		}
 
-		if strings.HasPrefix(string(message), "ERROR"){
-			fmt.Println(string(message))
+		if strings.HasPrefix(string(response), "ERROR"){
+			fmt.Println(string(response))
 			return
 		}
 	}
 
+	fileSize := binary.BigEndian.Uint32(sizeBuf)
 	fmt.Printf("Receiving file of size: %d bytes\n", fileSize)
 
 	//Receive the data
@@ -116,6 +116,7 @@ func (p *Peer) downloadFile(address string, fileName string){
 	bytesRead := 0
 	for bytesRead < int(fileSize){
 		n, err := conn.Read(fileData[bytesRead:])
+		//TODO: Add a timer here to automatically close connection and fail after some time
 
 		if err != nil && err != io.EOF {
 			fmt.Printf("Error reading file data: %v\n", err)

@@ -61,6 +61,7 @@ func (p *Peer) sendFile(conn net.Conn, fileName string){
 	if err != nil {
 		errorMsg := fmt.Sprintf("ERROR: %v\n", err)
 		fmt.Println(errorMsg)
+		conn.Write([]byte("ERR!"))
 		conn.Write([]byte(errorMsg))
 		return
 	}
