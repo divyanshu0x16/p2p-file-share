@@ -34,18 +34,6 @@ func NewPeer(listenAddr string, shareDir string) *Peer {
 	return p
 }
 
-// ScanLocalFiles scans the share directory and updates the local file list
-func (p *Peer) scanLocalFiles() {
-	fileList, err := file.ScanDirectory(p.shareDir, p.ListenAddr)
-	if err != nil {
-		fmt.Printf("Error scanning directory: %v\n", err)
-		return
-	}
-	
-	p.localFiles = fileList
-	fmt.Printf("Scanned %d files in %s\n", len(fileList.Files), p.shareDir)
-}
-
 func (p *Peer) StartListening(){
 	listener, err := net.Listen("tcp", p.ListenAddr)
 
@@ -204,8 +192,9 @@ func (p *Peer) requestFileList(address string){
 	}
 
 	defer conn.Close()
-	fmt.Println("Requesting file list from peer:", address)
+	p.addPeer(address)
 
+	fmt.Println("Requesting file list from peer:", address)
 	//Send file list request
 	conn.Write([]byte("GET_FILES\n"))
 
@@ -231,6 +220,18 @@ func (p *Peer) requestFileList(address string){
 
 	//Print the file list
 	file.PrintFileList(fileList)
+}
+
+// ScanLocalFiles scans the share directory and updates the local file list
+func (p *Peer) scanLocalFiles() {
+	fileList, err := file.ScanDirectory(p.shareDir, p.ListenAddr)
+	if err != nil {
+		fmt.Printf("Error scanning directory: %v\n", err)
+		return
+	}
+	
+	p.localFiles = fileList
+	fmt.Printf("Scanned %d files in %s\n", len(fileList.Files), p.shareDir)
 }
 
 func (p *Peer) addPeer(address string){
