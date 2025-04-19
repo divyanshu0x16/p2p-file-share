@@ -1,4 +1,4 @@
-package main
+package peer
 
 import (
 	"bufio"
@@ -45,6 +45,47 @@ func (p *Peer) StartListening(){
 	}
 }
 
+func (p *Peer) StartCommandLine(){
+	scanner := bufio.NewScanner(os.Stdin)
+	fmt.Println("P2P File Sharing - Commands:")
+	fmt.Println("  connect <address> - Connect to a peer")
+	fmt.Println("  list - List known peers")
+	fmt.Println("  exit - Exit the application")
+
+	for scanner.Scan() {
+		command := scanner.Text()
+		parts := strings.Fields(command)
+
+		if len(parts) == 0 {
+			continue
+		}
+
+		switch parts[0]{
+		case  "connect":
+			if len(parts) < 2 {
+				fmt.Println("Usage: connect <address>")
+				continue
+			}
+			go p.connectToPeer(parts[1])
+
+		case "list":
+			p.mutex.Lock()
+			fmt.Println("Known peers:")
+			for peer := range p.peers {
+				fmt.Println(" -", peer)
+			}
+			p.mutex.Unlock()
+
+		case "exit":
+			fmt.Println("Exiting...")
+			return
+
+		default:
+			fmt.Println("Unknown command. Available commands: connect, list, exit")
+		}
+	}
+}
+
 func (p *Peer) handleConnection(conn net.Conn){
 	defer conn.Close()
 
@@ -66,7 +107,7 @@ func (p *Peer) handleConnection(conn net.Conn){
 	}
 }
 
-func (p *Peer) ConnectToPeer(address string){
+func (p *Peer) connectToPeer(address string){
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		fmt.Println("Error connecting to peer:", err)
@@ -95,60 +136,3 @@ func (p *Peer) addPeer(address string){
 	fmt.Println("Current peers:", p.peers)
 }
 
-func (p *Peer) StartCommandLine(){
-	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("P2P File Sharing - Commands:")
-	fmt.Println("  connect <address> - Connect to a peer")
-	fmt.Println("  list - List known peers")
-	fmt.Println("  exit - Exit the application")
-
-	for scanner.Scan() {
-		command := scanner.Text()
-		parts := strings.Fields(command)
-
-		if len(parts) == 0 {
-			continue
-		}
-
-		switch parts[0]{
-		case  "connect":
-			if len(parts) < 2 {
-				fmt.Println("Usage: connect <address>")
-				continue
-			}
-			go p.ConnectToPeer(parts[1])
-
-		case "list":
-			p.mutex.Lock()
-			fmt.Println("Known peers:")
-			for peer := range p.peers {
-				fmt.Println(" -", peer)
-			}
-			p.mutex.Unlock()
-
-		case "exit":
-			fmt.Println("Exiting...")
-			return
-
-		default:
-			fmt.Println("Unknown command. Available commands: connect, list, exit")
-		}
-	}
-}
-
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run peer.go <listen-port>")
-		fmt.Println("Example: go run peer.go 8080")
-		return
-	}
-
-	port := os.Args[1]
-	listenAddr := ":" + port
-
-	peer := NewPeer(listenAddr)
-
-	go peer.StartListening()
-
-	peer.StartCommandLine()
-}
