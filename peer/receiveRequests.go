@@ -62,6 +62,7 @@ func (p *Peer) sendFile(conn net.Conn, fileName string){
 		errorMsg := fmt.Sprintf("ERROR: %v\n", err)
 		fmt.Println(errorMsg)
 		conn.Write([]byte(errorMsg))
+		return
 	}
 
 	//Send file size first (4 bytes)
