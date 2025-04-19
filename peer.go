@@ -6,38 +6,57 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 )
 
-func startServer(port string){
-	listener, err := net.Listen("tcp", ":"+port)
+type Peer struct {
+	ListenAddr string
+	peers map[string]bool
+	mutex sync.Mutex
+}
 
-	if(err != nil ){
-		fmt.Println("Error starting server:", err)
-		return 
+func NewPeer(listenAddr string) *Peer {
+	return &Peer{
+		ListenAddr: listenAddr,
+		peers: make(map[string]bool),
 	}
+}
+
+func (p *Peer) StartListening(){
+	listener, err := net.Listen("tcp", p.ListenAddr)
+
+	if err != nil {
+		fmt.Println("Error starting peer listener:", err)
+		return
+	}
+
 	defer listener.Close()
 
-	fmt.Println("Server listening on port", port)
+	fmt.Println("Listening for connections on", p.ListenAddr)
 
 	for {
 		conn, err := listener.Accept()
-		if(err != nil){
+		if err != nil {
 			fmt.Println("Error accepting connection:", err)
 			continue
 		}
 
-		go handleConnection(conn)
+		go p.handleConnection(conn)
 	}
 }
 
-func handleConnection(conn net.Conn){
+func (p *Peer) handleConnection(conn net.Conn){
 	defer conn.Close()
-	fmt.Println("New connection from:", conn.RemoteAddr())
+
+	remoteAddr := conn.RemoteAddr().String()
+	fmt.Println("New connection from:", remoteAddr)
+
+	p.addPeer(remoteAddr)
 
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		message := scanner.Text()
-		fmt.Println("Received:", message)
+		fmt.Printf("Message from %s: %s\n", remoteAddr, message)
 
 		conn.Write([]byte("Received your message: " + message + "\n"))
 	}
@@ -47,54 +66,89 @@ func handleConnection(conn net.Conn){
 	}
 }
 
-func connectToPeer(address string){
+func (p *Peer) ConnectToPeer(address string){
 	conn, err := net.Dial("tcp", address)
-
-	if ( err != nil ){
+	if err != nil {
 		fmt.Println("Error connecting to peer:", err)
+		return
 	}
 
-	defer conn.Close()
+	p.addPeer(address)
 
-	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("Type messages to send (or 'exit' to quit):")
+	fmt.Println("Connected to peer:", address)
+	conn.Write([]byte("Hello from " + p.ListenAddr + "\n"))
 
-	for scanner.Scan(){
-		message := scanner.Text()
-		if message == "exit" {
-			break
-		}
-
-		conn.Write([]byte(message + "\n"))
-
-		responseReader := bufio.NewReader(conn)
-		response, err := responseReader.ReadString('\n')
-		if ( err != nil ){
-			fmt.Println("Error reading response:", err)
-			break
-		}
-
+	response, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		fmt.Println("Error reading response:", err)
+	} else {
 		fmt.Println("Response:", strings.TrimSpace(response))
+	}
+
+	conn.Close()
+}
+
+func (p *Peer) addPeer(address string){
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.peers[address] = true
+	fmt.Println("Current peers:", p.peers)
+}
+
+func (p *Peer) StartCommandLine(){
+	scanner := bufio.NewScanner(os.Stdin)
+	fmt.Println("P2P File Sharing - Commands:")
+	fmt.Println("  connect <address> - Connect to a peer")
+	fmt.Println("  list - List known peers")
+	fmt.Println("  exit - Exit the application")
+
+	for scanner.Scan() {
+		command := scanner.Text()
+		parts := strings.Fields(command)
+
+		if len(parts) == 0 {
+			continue
+		}
+
+		switch parts[0]{
+		case  "connect":
+			if len(parts) < 2 {
+				fmt.Println("Usage: connect <address>")
+				continue
+			}
+			go p.ConnectToPeer(parts[1])
+
+		case "list":
+			p.mutex.Lock()
+			fmt.Println("Known peers:")
+			for peer := range p.peers {
+				fmt.Println(" -", peer)
+			}
+			p.mutex.Unlock()
+
+		case "exit":
+			fmt.Println("Exiting...")
+			return
+
+		default:
+			fmt.Println("Unknown command. Available commands: connect, list, exit")
+		}
 	}
 }
 
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: go run peer.go [server|client] [port|address]")
-		fmt.Println("Example (server): go run peer.go server 8080")
-		fmt.Println("Example (client): go run peer.go client 127.0.0.1:8080")
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: go run peer.go <listen-port>")
+		fmt.Println("Example: go run peer.go 8080")
 		return
 	}
-	
-	mode := os.Args[1]
-	arg := os.Args[2]
-	
-	switch mode {
-	case "server":
-		startServer(arg)
-	case "client":
-		connectToPeer(arg)
-	default:
-		fmt.Println("Invalid mode. Use 'server' or 'client'")
-	}
+
+	port := os.Args[1]
+	listenAddr := ":" + port
+
+	peer := NewPeer(listenAddr)
+
+	go peer.StartListening()
+
+	peer.StartCommandLine()
 }
